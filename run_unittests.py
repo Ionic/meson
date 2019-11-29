@@ -6301,16 +6301,19 @@ class LinuxlikeTests(BasePlatformTests):
 
     def _test_stds_impl(self, testdir: str, compiler: 'Compiler') -> None:
         has_cpp17 = (compiler.get_id() not in {'clang', 'gcc'} or
-                     compiler.get_id() == 'clang' and _clang_at_least(compiler, '>=5.0.0', '>=9.1') or
+                     compiler.get_id() == 'clang' and version_compare(compiler.version, '>=5.0.0') or
                      compiler.get_id() == 'gcc' and version_compare(compiler.version, '>=5.0.0'))
         has_cpp2a_c17 = (compiler.get_id() not in {'clang', 'gcc'} or
-                         compiler.get_id() == 'clang' and _clang_at_least(compiler, '>=6.0.0', '>=10.0') or
+                         compiler.get_id() == 'clang' and version_compare(compiler.version, '>=6.0.0') or
                          compiler.get_id() == 'gcc' and version_compare(compiler.version, '>=8.0.0'))
+        # The original code here disabled C++20 support on all Apple Clang versions.
+        # While their compilers do not support all features, C++20 support doesn't seem to be
+        # completely unusable, so let's keep our focus on the underlying clang version.
         has_cpp20 = (compiler.get_id() not in {'clang', 'gcc'} or
-                     compiler.get_id() == 'clang' and _clang_at_least(compiler, '>=10.0.0', None) or
+                     compiler.get_id() == 'clang' and version_compare(compiler.version, '>=10.0.0') or
                      compiler.get_id() == 'gcc' and version_compare(compiler.version, '>=10.0.0'))
         has_c18 = (compiler.get_id() not in {'clang', 'gcc'} or
-                   compiler.get_id() == 'clang' and _clang_at_least(compiler, '>=8.0.0', '>=11.0') or
+                   compiler.get_id() == 'clang' and version_compare(compiler.version, '>=8.0.0') or
                    compiler.get_id() == 'gcc' and version_compare(compiler.version, '>=8.0.0'))
         # Check that all the listed -std=xxx options for this compiler work just fine when used
         # https://en.wikipedia.org/wiki/Xcode#Latest_versions
@@ -9316,30 +9319,6 @@ class SubprojectsCommandTests(BasePlatformTests):
         out = self._subprojects_cmd(['foreach', '--types', 'git'] + dummy_cmd)
         self.assertEqual(ran_in(out), ['subprojects/sub_git'])
 
-def _clang_at_least(compiler: 'Compiler', minver: str, apple_minver: T.Optional[str]) -> bool:
-    """
-    check that Clang compiler is at least a specified version, whether AppleClang or regular Clang
-
-    Parameters
-    ----------
-    compiler:
-        Meson compiler object
-    minver: str
-        Clang minimum version
-    apple_minver: str
-        AppleCLang minimum version
-
-    Returns
-    -------
-    at_least: bool
-        Clang is at least the specified version
-    """
-    if isinstance(compiler, (mesonbuild.compilers.AppleClangCCompiler,
-                             mesonbuild.compilers.AppleClangCPPCompiler)):
-        if apple_minver is None:
-            return False
-        return version_compare(compiler.version, apple_minver)
-    return version_compare(compiler.version, minver)
 
 
 def unset_envs():
