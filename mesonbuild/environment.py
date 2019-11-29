@@ -1117,7 +1117,8 @@ class Environment:
 
                 return cls(
                     ccache + compiler, version, for_machine, is_cross, info,
-                    exe_wrap, defines, full_version=full_version, linker=linker)
+                    exe_wrap, defines, full_version=full_version, linker=linker,
+                    version_output=out)
 
             if 'Intel(R) C++ Intel(R)' in err:
                 version = search_version(err)

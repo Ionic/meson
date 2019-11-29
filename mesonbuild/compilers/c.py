@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import os.path
+import re
 import typing as T
 
 from .. import coredata
@@ -141,13 +142,124 @@ class AppleClangCCompiler(ClangCCompiler):
 
     """Handle the differences between Apple Clang and Vanilla Clang.
 
-    Right now this just handles the differences between the versions that new
-    C standards were added.
+    Right now we just try to map the Xcode-Clang version to a proper
+    Clang version, so that user code can just check the usual Clang
+    version. Note, however, that we cheat a little and floor the Clang
+    version down, because Apple takes snapshots of LLVM/Clang and also
+    modifies them a bit. Their compilers actually support a bit more
+    than the version exposed here, but typically less than the fully
+    released version.
+
+    Note that the mapping has to be updated for each new major
+    Xcode-Clang version!
     """
 
-    _C17_VERSION = '>=10.0.0'
-    _C18_VERSION = '>=11.0.0'
+    def __init__(self, exelist, version, for_machine: MachineChoice,
+                 is_cross, info: 'MachineInfo', exe_wrapper=None,
+                 defines: T.Optional[T.List[str]] = None, **kwargs):
+        ClangCCompiler.__init__(self, exelist, version, for_machine, is_cross, info, exe_wrapper, defines, **kwargs)
+        xcode_clang_version = None
+        # Check and use passed-through --version output data.
+        version_output = kwargs.get('version_output')
+        if version_output is not None:
+            xcode_clang_version = self.map_xcode_clang_version(version_output)
+        # Otherwise, try to use full_version which should contain the same information.
+        else:
+            full_version = kwargs.get('full_version')
+            if full_version is not None:
+                xcode_clang_version = self.map_xcode_clang_version(full_version)
+        # Note that if nothing is available we just give up and use the provided value.
+        if xcode_clang_version is not None:
+            self.version = xcode_clang_version
 
+    def map_xcode_clang_version(self, text):
+        # Apple patches their Xcode-based clang versions to show an Apple-internal
+        # version number, mostly correlated with Xcode itself.
+        # We don't want to expose this, though, since it's utterly useless for
+        # compiler feature checks.
+        # For instance, the clang version as shipped with Xcode 6.2 reports a
+        # version number of "6.0". If we use that in compiler feature checks, as
+        # in "is this clang 3.6.0 or higher?", the expression would evaluate to
+        # to true, even though the compiler is actually based on some version
+        # between 3.4.0 and 3.5.0.
+        # Also, Apple typically takes snapshots of clang and patches them around,
+        # including applying later bug fixes, so we never actually know what
+        # compiler release an Xcode tool corresponds to. We'll try to floor the
+        # version down, which should be a conservative guess.
+        xcode_clang_version = None
+        xcode_clang_version_regex = re.compile(r"""
+        \([a-zA-Z/]*clang-  # Version number must be enclosed in ([optionally something like tags/Apple/]clang-...)
+        (
+            \d{3,}          # Three or more digits - major version number
+        )                   # One occurrence
+        (
+            \.\d+           # Period and one or more digits
+        ){2,3}              # Two or three occurrences of minor/micro/patch version numbers
+        \)                  # Enclosing parenthesis (see above)
+        """, re.VERBOSE)
+        match = xcode_clang_version_regex.search(text)
+        if match:
+            xcode_clang_version = match.group(1)
+        else:
+            # Check for legacy versions.
+            # Legacy versions do not include the clang hyphen phrase... and
+            # might not even be enclosed in parentheses.
+            xcode_clang_version_regex = re.compile(r"""
+            \(              # Enclosing parenthesis
+            (
+                \d{2,3}     # Two or three digits - major version number
+            )               # One occurrence
+            (
+                \.\d+       # Period and one or more digits
+            ){,2}           # Zero or up to two occurrences of minor/micro version numbers
+            \)              # Enclosing parenthesis
+            """, re.VERBOSE)
+            match = xcode_clang_version_regex.search(text)
+            if match:
+                xcode_clang_version = match.group(1)
+            else:
+                # Even more legacy. No enclosing, just numbers.
+                xcode_clang_version_regex = re.compile(r"""
+                (
+                    \d  # Single digit - major version
+                )       # One occurrence
+                \.\d{2} # Two digits separated by dots
+                $       # End of line
+                """, re.VERBOSE)
+                match = xcode_clang_version_regex.search(text)
+                if match:
+                    xcode_clang_version = match.group(1)
+        if xcode_clang_version is not None:
+            xcode_clang_version_lut = {
+                ('1'):          '2.5.0',
+                ('60'):         '2.6.0',
+                ('70'):         '2.7.0',
+                ('77', '137'):  '2.8.0',
+                ('163', '211'): '2.9.0',
+                ('318', '421'): '3.0.0',
+                ('425'):        '3.1.0',
+                ('500'):        '3.2.0',
+                ('503'):        '3.3.0',
+                ('600'):        '3.4.0',
+                ('602'):        '3.5.0',
+                ('700'):        '3.6.0',
+                ('703'):        '3.7.0',
+                ('800', '802'): '3.8.0',
+                ('900'):        '4.0.0',
+                ('902'):        '5.0.2',
+                ('1000'):       '6.0.1',
+                ('1001'):       '7.0.0',
+                ('1100'):       '8.0.0',
+            }
+            for t in xcode_clang_version_lut.keys():
+                if type(t) is tuple:
+                    for k in t:
+                        if k == xcode_clang_version:
+                            xcode_clang_version = xcode_clang_version_lut[t]
+                else:
+                    if t == xcode_clang_version:
+                        xcode_clang_version = xcode_clang_version_lut[t]
+        return xcode_clang_version
 
 class EmscriptenCCompiler(EmscriptenMixin, LinkerEnvVarsMixin, ClangCCompiler):
     def __init__(self, exelist, version, for_machine: MachineChoice,

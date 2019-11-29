@@ -6128,13 +6128,13 @@ class LinuxlikeTests(BasePlatformTests):
 
     def _test_stds_impl(self, testdir, compiler, p: str):
         has_cpp17 = (compiler.get_id() not in {'clang', 'gcc'} or
-                     compiler.get_id() == 'clang' and _clang_at_least(compiler, '>=5.0.0', '>=9.1') or
+                     compiler.get_id() == 'clang' and version_compare(compiler.version, '>=5.0.0') or
                      compiler.get_id() == 'gcc' and version_compare(compiler.version, '>=5.0.0'))
         has_cpp2a_c17 = (compiler.get_id() not in {'clang', 'gcc'} or
-                         compiler.get_id() == 'clang' and _clang_at_least(compiler, '>=6.0.0', '>=10.0') or
+                         compiler.get_id() == 'clang' and version_compare(compiler.version, '>=6.0.0') or
                          compiler.get_id() == 'gcc' and version_compare(compiler.version, '>=8.0.0'))
         has_c18 = (compiler.get_id() not in {'clang', 'gcc'} or
-                   compiler.get_id() == 'clang' and _clang_at_least(compiler, '>=8.0.0', '>=11.0') or
+                   compiler.get_id() == 'clang' and version_compare(compiler.version, '>=8.0.0') or
                    compiler.get_id() == 'gcc' and version_compare(compiler.version, '>=8.0.0'))
         # Check that all the listed -std=xxx options for this compiler work just fine when used
         # https://en.wikipedia.org/wiki/Xcode#Latest_versions
@@ -8561,30 +8561,6 @@ class TAPParserTests(unittest.TestCase):
         self.assert_error(events)
         self.assert_test(events, number=2, name='', result=TestResult.FAIL)
         self.assert_last(events)
-
-
-def _clang_at_least(compiler, minver: str, apple_minver: str) -> bool:
-    """
-    check that Clang compiler is at least a specified version, whether AppleClang or regular Clang
-
-    Parameters
-    ----------
-    compiler:
-        Meson compiler object
-    minver: str
-        Clang minimum version
-    apple_minver: str
-        AppleCLang minimum version
-
-    Returns
-    -------
-    at_least: bool
-        Clang is at least the specified version
-    """
-    if isinstance(compiler, (mesonbuild.compilers.AppleClangCCompiler,
-                             mesonbuild.compilers.AppleClangCPPCompiler)):
-        return version_compare(compiler.version, apple_minver)
-    return version_compare(compiler.version, minver)
 
 
 def unset_envs():
